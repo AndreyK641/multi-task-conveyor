@@ -27,10 +27,10 @@ protected:
 #define TASKS 100000
 #define VAL 100000
 // define custom job class derrived from Job
-class CalcFactorialsJob : public Job
+class CalcJob : public Job
 {
 public:
-    CalcFactorialsJob() : Job(), m_res{} {}
+    CalcJob() : Job(), m_res{} {}
 
     // override process() function
     void process() override {
@@ -50,13 +50,22 @@ int main()
     auto start = chrono::high_resolution_clock::now();
 
     // create and start new job
-    CalcFactorialsJob* myjob = mt.emplace_job<CalcFactorialsJob>();
+    CalcJob* myjob = mt.emplace_job<CalcJob>();
 
     // wait untill job is done
     myjob->wait_until_done();
 
     auto stop = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(stop - start);
+    cout << "first pass done: " << duration << "\n";
+
+    // start job again
+    mt.restart_job(myjob->get_id());
+
+    myjob->wait_until_done();
+
+    stop = chrono::high_resolution_clock::now();
+    duration = chrono::duration_cast<chrono::microseconds>(stop - start);
 
     cout << "Multi duration:  " << duration << "\n";
 

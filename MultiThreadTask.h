@@ -42,6 +42,12 @@ public:
 		m_is_all_task_pushed.notify_all();
 	}
 
+	void reset()
+	{
+		m_is_all_task_pushed.clear();
+		m_is_done.clear();
+	}
+
 protected:
 	atomic_flag m_is_all_task_pushed;
 	atomic_flag m_is_done;
@@ -103,6 +109,7 @@ public:
 	{
 		m_task_queue_mutex.lock();
 
+		m_tasks_queue.clear();
 		m_tasks_queue.push_back(make_unique<Terminator>());
 
 		m_task_queue_mutex.unlock();
@@ -111,8 +118,12 @@ public:
 
 		for (auto& t : m_tasks)
 			t.join();
+
+		m_tasks.clear();
+		m_tasks_queue.clear();
 	}
 
+	// tasks functions
 	template<class T>
 	void push_task(unique_ptr<T>&& task)
 	{
@@ -134,6 +145,7 @@ public:
 		push_task<T>( forward<unique_ptr<T>>(make_unique<T>(forward<Args>(args)...)) );
 	}
 
+	// jobs functions
 	template<class T>
 	T* push_job(unique_ptr<T>&& job)
 	{
@@ -161,16 +173,35 @@ public:
 		return push_job<T>(forward<unique_ptr<T>>(make_unique<T>(forward<Args>(args)...)));
 	}
 
-	bool check_job_is_done(JOBID jobid)
+	void restart_job(const JOBID jobid)
 	{
-		unique_lock lk(m_task_queue_mutex);
+		if (jobid == nullptr)
+			return;
+
+		shared_lock lk(m_job_map_mutex);
+		
+		jobid->reset();
+
+		thread job_thread(&MultiTask::process_job, this, jobid);
+		job_thread.detach();
+	}
+
+	bool check_job_is_done(const JOBID jobid)
+	{
+		if (jobid == nullptr)
+			return true;
+
+		shared_lock lk(m_task_queue_mutex);
 
 		return is_job_tasks_queue_empty(jobid);
 	}
 
-	void wait_job_tasks_done(JOBID jobid)
+	void wait_job_tasks_done(const JOBID jobid)
 	{
-		unique_lock lk(m_task_queue_mutex);
+		if (jobid == nullptr)
+			return;
+
+		shared_lock lk(m_task_queue_mutex);
 
 		while (!is_job_tasks_queue_empty(jobid))
 			m_task_done.wait(lk);
