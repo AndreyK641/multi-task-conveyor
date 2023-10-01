@@ -18,7 +18,11 @@ class Job
 public:
 	Job() : m_conveyor(nullptr) {};
 
+	// main function where tasks are prepared and pushed 
 	virtual void process() = 0;
+
+	// callback function that is called after all pushed tasks are done
+	virtual void process_after_done() {}
 
 	void set_conveyor(MultiTask* conveyor)	{ m_conveyor = conveyor; }
 
@@ -34,6 +38,8 @@ public:
 	{ 
 		m_is_done.test_and_set();
 		m_is_done.notify_all();
+
+		process_after_done();
 	}
 
 	void set_all_tasks_pushed()
