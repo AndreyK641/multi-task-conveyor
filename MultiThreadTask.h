@@ -6,6 +6,7 @@
 #include <atomic>
 #include <map>
 #include <vector>
+#include <algorithm>
 
 using namespace std;
 
@@ -273,6 +274,6 @@ private:
 
 	bool is_job_tasks_queue_empty(JOBID jobid) 
 	{
-		return find_if(m_tasks_queue.begin(), m_tasks_queue.end(), [jobid](const unique_ptr<Task>& elem) { return elem->get_id() == jobid; }) == m_tasks_queue.end();
+		return none_of(m_tasks_queue.begin(), m_tasks_queue.end(), [jobid](const unique_ptr<Task>& elem) { return elem->get_id() == jobid; });
 	}
 };

@@ -57,7 +57,9 @@ int main()
 
     auto stop = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::microseconds>(stop - start);
-    cout << "first pass done: " << duration << "\n";
+    cout << "first pass duration: " << duration << "\n";
+
+    start = chrono::high_resolution_clock::now();
 
     // start job again
     mt.restart_job(myjob->get_id());
@@ -67,7 +69,7 @@ int main()
     stop = chrono::high_resolution_clock::now();
     duration = chrono::duration_cast<chrono::microseconds>(stop - start);
 
-    cout << "Multi duration:  " << duration << "\n";
+    cout << "second pass duration: " << duration << "\n";
 
     start = chrono::high_resolution_clock::now();
 
@@ -88,7 +90,7 @@ int main()
         cout << res[j] << "\r";
     }
 
-    cout << "Single duration: " << duration;
+    cout << "Single thread duration: " << duration;
 
     return 0;
 }
