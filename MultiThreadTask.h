@@ -17,7 +17,7 @@ typedef Job* JOBID;
 class Job
 {
 public:
-	Job() : m_conveyor(nullptr) {};
+	Job() : m_conveyor(nullptr) {}
 
 	// main function where tasks are prepared and pushed 
 	virtual void process() = 0;
@@ -55,6 +55,8 @@ public:
 		m_is_done.clear();
 	}
 
+	virtual ~Job() {}
+
 protected:
 	atomic_flag m_is_all_task_pushed;
 	atomic_flag m_is_done;
@@ -71,6 +73,8 @@ public:
 
 	virtual void process() = 0;
 
+	virtual ~Task() {}
+
 protected:
 	const bool m_is_terminator;
 	const JOBID m_jobid;
@@ -84,7 +88,6 @@ public:
 	void process() override {}
 };
 
-//template <class T, typename = enable_if_t<is_base_of_v<Task, T>>, class P, typename = enable_if_t<is_base_of_v<Producer, P>>>
 class MultiTask
 {
 public:
