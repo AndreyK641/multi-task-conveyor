@@ -5,6 +5,8 @@
 #include <chrono>
 #include "MultiThreadTask.h"
 
+using namespace multi_task_conveyor;
+
 // define custom task class derrived from Task
 class CalcTask : public Task
 {
