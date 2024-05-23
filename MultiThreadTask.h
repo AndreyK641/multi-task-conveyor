@@ -25,29 +25,35 @@ namespace multi_task_conveyor {
 		virtual void process() = 0;
 
 		// callback function that is called after all pushed tasks are done
-		virtual void process_after_done() {}
+		virtual void process_after_done() = 0;
 
 		void set_conveyor(MultiTask* conveyor) { m_conveyor = conveyor; }
+		MultiTask* get_conveyor() {	return m_conveyor; }
 
 		JOBID get_id() { return static_cast<JOBID>(this); }
 
 		bool is_done() { return m_is_done.test(); }
 
 		void inc_task_count() { ++m_running_tasks; }
-		void dec_task_count() { --m_running_tasks; }
+		void dec_task_count() { --m_running_tasks; m_running_tasks.notify_one(); }
 		unsigned long long get_task_count() { return m_running_tasks.load(); }
 
 		void wait_until_done() { m_is_done.wait(false); }
 
-		void wait_until_all_tasks_pushed() { m_is_all_task_pushed.wait(false); }
+		void wait_until_all_tasks_done() { 
+			unsigned long t = m_running_tasks;
+			while (t) {
+				m_running_tasks.wait(t);
+				t = m_running_tasks;
+			}
 
-		void set_done()
-		{
 			m_is_done.test_and_set();
 			m_is_done.notify_all();
 
 			process_after_done();
 		}
+
+		void wait_until_all_tasks_pushed() { m_is_all_task_pushed.wait(false); }
 
 		void set_all_tasks_pushed()
 		{
@@ -63,11 +69,11 @@ namespace multi_task_conveyor {
 
 		virtual ~Job() {}
 
-	protected:
+	private:
 		atomic_flag m_is_all_task_pushed;
 		atomic_flag m_is_done;
 		MultiTask* m_conveyor;
-		atomic_ullong m_running_tasks;
+		atomic_ulong m_running_tasks;
 	};
 
 	class Task
@@ -82,7 +88,7 @@ namespace multi_task_conveyor {
 
 		virtual ~Task() {}
 
-	protected:
+	private:
 		const bool m_is_terminator;
 		const JOBID m_jobid;
 	};
@@ -167,17 +173,16 @@ namespace multi_task_conveyor {
 		template<derived_from<Job> T>
 		T* push_job(unique_ptr<T>&& job)
 		{
-			unique_lock ul(m_job_map_mutex);
-
 			auto job_ptr = job.get();
 
 			JOBID jobid = static_cast<JOBID>(job_ptr);
 			job->set_conveyor(this);
 
-			auto [new_obj_itt, is_success] = m_jobs_map.insert(pair{ jobid, forward<unique_ptr<T>>(job) });
+			unique_lock ul(m_job_map_mutex);
+			if (auto [new_obj_itt, is_success] = m_jobs_map.try_emplace(jobid, forward<unique_ptr<T>>(job)); !is_success)
+				return job_ptr;
 
-			if (!is_success)
-				return 0;
+			ul.unlock();
 
 			thread job_thread(&MultiTask::process_job, this, job_ptr);
 			job_thread.detach();
@@ -189,6 +194,18 @@ namespace multi_task_conveyor {
 		T* emplace_job(Args&& ...args)
 		{
 			return push_job<T>(forward<unique_ptr<T>>(make_unique<T>(forward<Args>(args)...)));
+		}
+
+		template<derived_from<Job> T>
+		unique_ptr<T> pop_job(const JOBID jobid)
+		{
+			unique_lock ul(m_job_map_mutex);
+			auto node = m_jobs_map.extract(jobid);
+
+			if (node.empty())
+				return {};
+			else
+				return unique_ptr<T>(static_cast<T*>(node.mapped().release()));
 		}
 
 		void restart_job(const JOBID jobid)
@@ -212,14 +229,12 @@ namespace multi_task_conveyor {
 			return jobid->get_task_count() == 0;
 		}
 
-		void wait_job_tasks_done(const JOBID jobid)
+		void wait_job_done(const JOBID jobid)
 		{
 			if (jobid == nullptr)
 				return;
 
-			shared_lock lk(m_task_queue_mutex);
-
-			m_task_done.wait(lk, [jobid]() {return jobid->get_task_count() == 0; });
+			jobid->wait_until_done();
 		}
 
 		void process_task()
@@ -254,9 +269,7 @@ namespace multi_task_conveyor {
 
 			job->set_all_tasks_pushed();
 
-			wait_job_tasks_done(job->get_id());
-
-			job->set_done();
+			job->wait_until_all_tasks_done();
 		}
 
 	private:
@@ -274,7 +287,7 @@ namespace multi_task_conveyor {
 		vector<thread> m_tasks;
 
 		// syncronisation objects for tasks queue
-		shared_mutex m_task_queue_mutex;
+		mutex m_task_queue_mutex;
 		condition_variable_any m_new_task_cv;
 		condition_variable_any m_task_done;
 
