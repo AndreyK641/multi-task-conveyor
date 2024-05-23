@@ -79,7 +79,7 @@ int main()
     duration = chrono::duration_cast<chrono::milliseconds>(stop - start);
     cout << "second pass duration: " << duration << "\n" << "result: " << res_sum << "\n";
 
-    auto my_job = mt.pop_job<CalcJob>(myjob);
+    auto my_job = mt.pop_job(myjob);
 
     double res[TASKS]{};
     res_sum = 0;

@@ -196,16 +196,15 @@ namespace multi_task_conveyor {
 			return push_job<T>(forward<unique_ptr<T>>(make_unique<T>(forward<Args>(args)...)));
 		}
 
-		template<derived_from<Job> T>
-		unique_ptr<T> pop_job(const JOBID jobid)
+		auto pop_job(const JOBID jobid)
 		{
 			unique_lock ul(m_job_map_mutex);
 			auto node = m_jobs_map.extract(jobid);
 
 			if (node.empty())
-				return {};
+				return unique_ptr<remove_pointer_t<decltype(jobid)>>{};
 			else
-				return unique_ptr<T>(static_cast<T*>(node.mapped().release()));
+				return unique_ptr<remove_pointer_t<decltype(jobid)>>(static_cast<decltype(jobid)>(node.mapped().release()));
 		}
 
 		void restart_job(const JOBID jobid)
