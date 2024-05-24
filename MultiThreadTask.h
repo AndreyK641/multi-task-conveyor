@@ -1,7 +1,6 @@
 #pragma once
 #include <deque>
 #include <thread>
-#include <shared_mutex>
 #include <condition_variable>
 #include <atomic>
 #include <map>
@@ -20,11 +19,12 @@ namespace multi_task_conveyor {
 	{
 	public:
 		Job() : m_conveyor(nullptr), m_running_tasks(0) {}
+		virtual ~Job() {}
 
-		// main function where tasks are prepared and pushed 
+		// override this function to prepare and push tasks
 		virtual void process() = 0;
 
-		// callback function that is called after all pushed tasks are done
+		// override this function to implement some logic after all pushed tasks are done
 		virtual void process_after_done() = 0;
 
 		void set_conveyor(MultiTask* conveyor) { m_conveyor = conveyor; }
@@ -67,8 +67,6 @@ namespace multi_task_conveyor {
 			m_is_done.clear();
 		}
 
-		virtual ~Job() {}
-
 	private:
 		atomic_flag m_is_all_task_pushed;
 		atomic_flag m_is_done;
@@ -79,26 +77,16 @@ namespace multi_task_conveyor {
 	class Task
 	{
 	public:
-		Task(JOBID jobid, bool is_terminator = false) : m_is_terminator(is_terminator), m_jobid(jobid) {}
-
-		bool is_terminator() { return m_is_terminator; }
-		JOBID get_id() { return m_jobid; }
-
-		virtual void process() = 0;
-
+		Task(JOBID jobid) : m_jobid(jobid) {}
 		virtual ~Task() {}
 
+		JOBID get_id() { return m_jobid; }
+
+		// override this function for processing logic
+		virtual void process() = 0;
+
 	private:
-		const bool m_is_terminator;
 		const JOBID m_jobid;
-	};
-
-	class Terminator : public Task
-	{
-	public:
-		Terminator() : Task(0, true) {}
-
-		void process() override {}
 	};
 
 	class MultiTask
@@ -133,7 +121,8 @@ namespace multi_task_conveyor {
 			m_task_queue_mutex.lock();
 
 			m_tasks_queue.clear();
-			m_tasks_queue.push_back(make_unique<Terminator>());
+
+			m_tasks_queue.push_back(unique_ptr<Task>());
 
 			m_task_queue_mutex.unlock();
 
@@ -212,8 +201,6 @@ namespace multi_task_conveyor {
 			if (jobid == nullptr)
 				return;
 
-			shared_lock lk(m_job_map_mutex);
-
 			jobid->reset();
 
 			thread job_thread(&MultiTask::process_job, this, jobid);
@@ -246,7 +233,7 @@ namespace multi_task_conveyor {
 
 				auto& task_ref = m_tasks_queue.front();
 
-				if (task_ref->is_terminator())
+				if (task_ref.get() == nullptr)
 					break;
 
 				auto task = move(task_ref);
@@ -277,7 +264,7 @@ namespace multi_task_conveyor {
 		map<JOBID, unique_ptr<Job>> m_jobs_map;
 
 		// syncronisation objects for jobs map
-		shared_mutex m_job_map_mutex;
+		mutex m_job_map_mutex;
 
 		// max tasks quantity
 		unsigned int m_max_tasks;
