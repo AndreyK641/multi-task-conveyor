@@ -53,7 +53,7 @@ public:
 int main()
 {
     // create multitask object
-    MultiTask mt(20);
+    MultiTask mt;
 
     auto start = chrono::high_resolution_clock::now();
 

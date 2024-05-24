@@ -47,10 +47,10 @@ namespace multi_task_conveyor {
 				t = m_running_tasks;
 			}
 
+			process_after_done();
+
 			m_is_done.test_and_set();
 			m_is_done.notify_all();
-
-			process_after_done();
 		}
 
 		void wait_until_all_tasks_pushed() { m_is_all_task_pushed.wait(false); }
